@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Juego de Espada y Salto</title>
+    <title>Juego - Arreglado el Suelo</title>
     <style>
         body { margin: 0; overflow: hidden; background: #5c94fc; font-family: Arial; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-weight: bold; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px 4px #000; z-index: 10; }
         #respawnBtn { 
             display: none; position: absolute; top: 50%; left: 50%; 
-            transform: translate(-50%, -50%); padding: 20px; 
-            font-size: 20px; cursor: pointer; background: #333; color: white; border: none;
+            transform: translate(-50%, -50%); padding: 20px 40px; 
+            font-size: 24px; cursor: pointer; background: #ff4747; color: white; border: none; border-radius: 10px; z-index: 20;
         }
     </style>
 </head>
 <body>
-    <div id="ui">Presiona 'X' para atacar | Flechas para moverte</div>
+    <div id="ui"><h2>X: Espada | Flechas: Mover | Espacio: Saltar</h2></div>
     <button id="respawnBtn" onclick="resetGame()">REAPARECER</button>
     <canvas id="gameCanvas"></canvas>
 
@@ -21,36 +21,38 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const respawnBtn = document.getElementById('respawnBtn');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
         let gameActive = true;
         const player = {
-            x: 100, y: 100, width: 30, height: 50,
-            dy: 0, jumpForce: 12, gravity: 0.6, speed: 5,
+            x: 100, y: 50, width: 30, height: 50,
+            dy: 0, jumpForce: 12, gravity: 0.8, speed: 5,
             grounded: false, keys: {}, attacking: false, attackTimer: 0
         };
 
-        let enemy = { x: 800, y: 0, width: 40, height: 40, speed: 2, alive: true };
+        let enemy = { x: 800, y: 0, width: 40, height: 40, speed: 3, alive: true };
 
-        const platforms = [
-            { x: 0, y: canvas.height - 40, width: canvas.width, height: 40 }, // Suelo seguro
-            { x: 400, y: canvas.height - 180, width: 200, height: 20 },
-            { x: 700, y: canvas.height - 300, width: 200, height: 20 }
-        ];
+        // Definimos el suelo claramente
+        const GROUND_Y = canvas.height - 60;
 
         window.addEventListener('keydown', e => {
             player.keys[e.code] = true;
             if (e.code === 'KeyX' && !player.attacking) {
                 player.attacking = true;
-                player.attackTimer = 10; // Duración del ataque
+                player.attackTimer = 15;
             }
         });
         window.addEventListener('keyup', e => player.keys[e.code] = false);
 
         function resetGame() {
-            player.x = 100; player.y = 100; player.dy = 0;
-            enemy.x = 800; enemy.alive = true;
+            player.x = 100; player.y = 50; player.dy = 0;
+            enemy.x = canvas.width - 100; enemy.alive = true;
             gameActive = true;
             respawnBtn.style.display = 'none';
             loop();
@@ -59,49 +61,48 @@
         function update() {
             if (!gameActive) return;
 
-            // Movimiento
-            if (player.keys['ArrowLeft']) player.x -= player.speed;
-            if (player.keys['ArrowRight']) player.x += player.speed;
+            // Movimiento lateral
+            if (player.keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+            if (player.keys['ArrowRight'] && player.x < canvas.width - player.width) player.x += player.speed;
+            
+            // Salto
             if (player.keys['Space'] && player.grounded) {
                 player.dy = -player.jumpForce;
                 player.grounded = false;
             }
 
-            // Gravedad
+            // Aplicar gravedad
             player.dy += player.gravity;
             player.y += player.dy;
-            player.grounded = false;
 
-            // Colisión con plataformas
-            platforms.forEach(p => {
-                if (player.x < p.x + p.width && player.x + player.width > p.x &&
-                    player.y + player.height > p.y && player.y + player.height < p.y + player.dy + 10) {
-                    player.y = p.y - player.height;
-                    player.dy = 0;
-                    player.grounded = true;
-                }
-            });
+            // --- DETECCIÓN DE SUELO (Súper sólida) ---
+            if (player.y + player.height > GROUND_Y) {
+                player.y = GROUND_Y - player.height;
+                player.dy = 0;
+                player.grounded = true;
+            } else {
+                player.grounded = false;
+            }
 
-            // Lógica de la Espada (Tecla X)
+            // Ataque con espada
             if (player.attacking) {
                 player.attackTimer--;
                 if (player.attackTimer <= 0) player.attacking = false;
-
-                // Daño al enemigo
-                let swordX = player.x + player.width;
-                if (enemy.alive && swordX > enemy.x && player.x < enemy.x + enemy.width && 
+                
+                // Si la espada toca al enemigo
+                if (enemy.alive && player.x + player.width + 25 > enemy.x && player.x < enemy.x + enemy.width && 
                     player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
                     enemy.alive = false;
                 }
             }
 
-            // Enemigo (se mueve y mata al tocarte)
+            // Enemigo
             if (enemy.alive) {
-                enemy.y = canvas.height - 80; // Puesto en el suelo
+                enemy.y = GROUND_Y - enemy.height;
                 enemy.x -= enemy.speed;
-                if (enemy.x < -40) enemy.x = canvas.width;
+                if (enemy.x < -50) enemy.x = canvas.width;
 
-                // Colisión enemigo vs jugador (si no estás atacando)
+                // Muerte del jugador
                 if (!player.attacking && player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
                     player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
                     gameActive = false;
@@ -113,26 +114,36 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Dibujar plataformas
-            ctx.fillStyle = '#8b4513';
-            platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
+            // Dibujar Suelo (Marrón con pasto verde arriba)
+            ctx.fillStyle = '#4d2600'; // Tierra
+            ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+            ctx.fillStyle = '#2ecc71'; // Pasto
+            ctx.fillRect(0, GROUND_Y, canvas.width, 10);
 
             // Dibujar Enemigo
             if (enemy.alive) {
                 ctx.fillStyle = 'red';
                 ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                // Ojos del enemigo
+                ctx.fillStyle = 'white';
+                ctx.fillRect(enemy.x + 5, enemy.y + 10, 8, 8);
+                ctx.fillRect(enemy.x + 25, enemy.y + 10, 8, 8);
             }
 
             // Dibujar Jugador (Chico de Negro)
             ctx.fillStyle = 'black'; 
-            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15);
+            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15); // Ropa
             ctx.fillStyle = '#ffdbac'; 
-            ctx.fillRect(player.x + 5, player.y, 20, 20);
+            ctx.fillRect(player.x + 5, player.y, 20, 20); // Cara
+            ctx.fillStyle = 'black';
+            ctx.fillRect(player.x + 5, player.y - 2, 20, 7); // Pelo
 
             // Dibujar Espada
             if (player.attacking) {
-                ctx.fillStyle = 'silver';
-                ctx.fillRect(player.x + player.width, player.y + 20, 25, 5); // Espada estirada
+                ctx.fillStyle = '#bdc3c7'; // Color metal
+                ctx.fillRect(player.x + player.width, player.y + 25, 30, 8); // Hoja
+                ctx.fillStyle = '#7f8c8d'; // Mango
+                ctx.fillRect(player.x + player.width - 5, player.y + 22, 5, 14);
             }
         }
 
