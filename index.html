@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chico de Negro - Salto Pro</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #5c94fc; }
+        canvas { display: block; background: #5c94fc; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const player = {
+            x: 100, y: 300, width: 30, height: 50,
+            dy: 0, jumpForce: 12, gravity: 0.6, speed: 5,
+            grounded: false, keys: {}
+        };
+
+        const platforms = [
+            { x: 0, y: canvas.height - 40, width: canvas.width, height: 40 }, // Suelo
+            { x: 300, y: canvas.height - 150, width: 150, height: 20 },
+            { x: 600, y: canvas.height - 250, width: 150, height: 20 },
+            { x: 900, y: canvas.height - 350, width: 150, height: 20 }
+        ];
+
+        window.addEventListener('keydown', e => player.keys[e.code] = true);
+        window.addEventListener('keyup', e => player.keys[e.code] = false);
+
+        function update() {
+            if (player.keys['ArrowLeft']) player.x -= player.speed;
+            if (player.keys['ArrowRight']) player.x += player.speed;
+            if (player.keys['Space'] && player.grounded) {
+                player.dy = -player.jumpForce;
+                player.grounded = false;
+            }
+
+            player.dy += player.gravity;
+            player.y += player.dy;
+            player.grounded = false;
+
+            platforms.forEach(p => {
+                if (player.x < p.x + p.width && player.x + player.width > p.x &&
+                    player.y + player.height > p.y && player.y + player.height < p.y + p.dy + 10) {
+                    player.y = p.y - player.height;
+                    player.dy = 0;
+                    player.grounded = true;
+                }
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar Plataformas (marrón como tierra)
+            ctx.fillStyle = '#8b4513';
+            platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
+
+            // Dibujar Personaje (Chico de Negro)
+            ctx.fillStyle = 'black'; // Ropa negra
+            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15); // Cuerpo
+            ctx.fillStyle = '#ffdbac'; // Piel de la cara
+            ctx.fillRect(player.x + 5, player.y, 20, 20); // Cabeza
+            ctx.fillStyle = 'black'; // Pelo negro
+            ctx.fillRect(player.x + 5, player.y, 20, 5);
+        }
+
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        loop();
+    </script>
+</body>
+</html>
