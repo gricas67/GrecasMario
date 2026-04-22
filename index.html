@@ -1,37 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chico de Negro - Salto Pro</title>
+    <title>Juego de Espada y Salto</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #5c94fc; }
-        canvas { display: block; background: #5c94fc; }
+        body { margin: 0; overflow: hidden; background: #5c94fc; font-family: Arial; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-weight: bold; }
+        #respawnBtn { 
+            display: none; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); padding: 20px; 
+            font-size: 20px; cursor: pointer; background: #333; color: white; border: none;
+        }
     </style>
 </head>
 <body>
+    <div id="ui">Presiona 'X' para atacar | Flechas para moverte</div>
+    <button id="respawnBtn" onclick="resetGame()">REAPARECER</button>
     <canvas id="gameCanvas"></canvas>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const respawnBtn = document.getElementById('respawnBtn');
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
+        let gameActive = true;
         const player = {
-            x: 100, y: 300, width: 30, height: 50,
+            x: 100, y: 100, width: 30, height: 50,
             dy: 0, jumpForce: 12, gravity: 0.6, speed: 5,
-            grounded: false, keys: {}
+            grounded: false, keys: {}, attacking: false, attackTimer: 0
         };
 
+        let enemy = { x: 800, y: 0, width: 40, height: 40, speed: 2, alive: true };
+
         const platforms = [
-            { x: 0, y: canvas.height - 40, width: canvas.width, height: 40 }, // Suelo
-            { x: 300, y: canvas.height - 150, width: 150, height: 20 },
-            { x: 600, y: canvas.height - 250, width: 150, height: 20 },
-            { x: 900, y: canvas.height - 350, width: 150, height: 20 }
+            { x: 0, y: canvas.height - 40, width: canvas.width, height: 40 }, // Suelo seguro
+            { x: 400, y: canvas.height - 180, width: 200, height: 20 },
+            { x: 700, y: canvas.height - 300, width: 200, height: 20 }
         ];
 
-        window.addEventListener('keydown', e => player.keys[e.code] = true);
+        window.addEventListener('keydown', e => {
+            player.keys[e.code] = true;
+            if (e.code === 'KeyX' && !player.attacking) {
+                player.attacking = true;
+                player.attackTimer = 10; // Duración del ataque
+            }
+        });
         window.addEventListener('keyup', e => player.keys[e.code] = false);
 
+        function resetGame() {
+            player.x = 100; player.y = 100; player.dy = 0;
+            enemy.x = 800; enemy.alive = true;
+            gameActive = true;
+            respawnBtn.style.display = 'none';
+            loop();
+        }
+
         function update() {
+            if (!gameActive) return;
+
+            // Movimiento
             if (player.keys['ArrowLeft']) player.x -= player.speed;
             if (player.keys['ArrowRight']) player.x += player.speed;
             if (player.keys['Space'] && player.grounded) {
@@ -39,37 +67,81 @@
                 player.grounded = false;
             }
 
+            // Gravedad
             player.dy += player.gravity;
             player.y += player.dy;
             player.grounded = false;
 
+            // Colisión con plataformas
             platforms.forEach(p => {
                 if (player.x < p.x + p.width && player.x + player.width > p.x &&
-                    player.y + player.height > p.y && player.y + player.height < p.y + p.dy + 10) {
+                    player.y + player.height > p.y && player.y + player.height < p.y + player.dy + 10) {
                     player.y = p.y - player.height;
                     player.dy = 0;
                     player.grounded = true;
                 }
             });
+
+            // Lógica de la Espada (Tecla X)
+            if (player.attacking) {
+                player.attackTimer--;
+                if (player.attackTimer <= 0) player.attacking = false;
+
+                // Daño al enemigo
+                let swordX = player.x + player.width;
+                if (enemy.alive && swordX > enemy.x && player.x < enemy.x + enemy.width && 
+                    player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
+                    enemy.alive = false;
+                }
+            }
+
+            // Enemigo (se mueve y mata al tocarte)
+            if (enemy.alive) {
+                enemy.y = canvas.height - 80; // Puesto en el suelo
+                enemy.x -= enemy.speed;
+                if (enemy.x < -40) enemy.x = canvas.width;
+
+                // Colisión enemigo vs jugador (si no estás atacando)
+                if (!player.attacking && player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
+                    player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
+                    gameActive = false;
+                    respawnBtn.style.display = 'block';
+                }
+            }
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Dibujar Plataformas (marrón como tierra)
+            // Dibujar plataformas
             ctx.fillStyle = '#8b4513';
             platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
 
-            // Dibujar Personaje (Chico de Negro)
-            ctx.fillStyle = 'black'; // Ropa negra
-            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15); // Cuerpo
-            ctx.fillStyle = '#ffdbac'; // Piel de la cara
-            ctx.fillRect(player.x + 5, player.y, 20, 20); // Cabeza
-            ctx.fillStyle = 'black'; // Pelo negro
-            ctx.fillRect(player.x + 5, player.y, 20, 5);
+            // Dibujar Enemigo
+            if (enemy.alive) {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+
+            // Dibujar Jugador (Chico de Negro)
+            ctx.fillStyle = 'black'; 
+            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15);
+            ctx.fillStyle = '#ffdbac'; 
+            ctx.fillRect(player.x + 5, player.y, 20, 20);
+
+            // Dibujar Espada
+            if (player.attacking) {
+                ctx.fillStyle = 'silver';
+                ctx.fillRect(player.x + player.width, player.y + 20, 25, 5); // Espada estirada
+            }
         }
 
-        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        function loop() {
+            update();
+            draw();
+            if (gameActive) requestAnimationFrame(loop);
+        }
+
         loop();
     </script>
 </body>
