@@ -1,158 +1,212 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Juego - Arreglado el Suelo</title>
+    <title>Chico de Negro: El Guerrero</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #5c94fc; font-family: Arial; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px 4px #000; z-index: 10; }
+        body { margin: 0; overflow: hidden; background: #5c94fc; font-family: 'Courier New', Courier, monospace; }
+        #hud { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px 4px #000; font-size: 18px; line-height: 1.5; pointer-events: none; }
         #respawnBtn { 
             display: none; position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%); padding: 20px 40px; 
-            font-size: 24px; cursor: pointer; background: #ff4747; color: white; border: none; border-radius: 10px; z-index: 20;
+            font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
-    <div id="ui"><h2>X: Espada | Flechas: Mover | Espacio: Saltar</h2></div>
-    <button id="respawnBtn" onclick="resetGame()">REAPARECER</button>
+    <div id="hud">
+        VIDA: <span id="hp">100</span>%<br>
+        ENEMIGOS: <span id="kills">0</span>/10<br>
+        <span id="bossWarn" style="color: yellow; display: none;">¡EL JEFE HA APARECIDO!</span>
+    </div>
+    <button id="respawnBtn" onclick="resetGame()">REINTENTAR</button>
     <canvas id="gameCanvas"></canvas>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const hpDisplay = document.getElementById('hp');
+        const killsDisplay = document.getElementById('kills');
+        const bossWarn = document.getElementById('bossWarn');
         const respawnBtn = document.getElementById('respawnBtn');
-        
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
         let gameActive = true;
+        let killCount = 0;
+        const GROUND_Y = canvas.height - 60;
+
         const player = {
-            x: 100, y: 50, width: 30, height: 50,
-            dy: 0, jumpForce: 12, gravity: 0.8, speed: 5,
-            grounded: false, keys: {}, attacking: false, attackTimer: 0
+            x: 100, y: 100, width: 30, height: 50,
+            dy: 0, jumpForce: 13, gravity: 0.7, speed: 6,
+            grounded: false, keys: {}, attacking: false, attackTimer: 0, hp: 100
         };
 
-        let enemy = { x: 800, y: 0, width: 40, height: 40, speed: 3, alive: true };
+        let enemies = [];
+        let boss = null;
+        let cherry = null;
+        const platforms = [
+            { x: 300, y: GROUND_Y - 120, w: 200, h: 15 },
+            { x: 700, y: GROUND_Y - 240, w: 200, h: 15 },
+            { x: 100, y: GROUND_Y - 240, w: 150, h: 15 }
+        ];
 
-        // Definimos el suelo claramente
-        const GROUND_Y = canvas.height - 60;
+        function spawnEnemy() {
+            if (enemies.length < 3 && !boss) {
+                enemies.push({ x: canvas.width + Math.random() * 500, width: 40, height: 40, hp: 2, speed: 2 + Math.random() * 2 });
+            }
+        }
+
+        function spawnBoss() {
+            boss = { x: canvas.width + 100, width: 80, height: 80, hp: 4, speed: 1.5 };
+            bossWarn.style.display = 'block';
+        }
+
+        function spawnCherry() {
+            if (!cherry) {
+                cherry = { x: Math.random() * (canvas.width - 30), y: -50, width: 25, height: 25, active: true };
+            }
+        }
+
+        setInterval(spawnEnemy, 2000);
+        setInterval(spawnCherry, 8000); // Cereza cada 8 seg
 
         window.addEventListener('keydown', e => {
             player.keys[e.code] = true;
             if (e.code === 'KeyX' && !player.attacking) {
                 player.attacking = true;
-                player.attackTimer = 15;
+                player.attackTimer = 12;
             }
         });
         window.addEventListener('keyup', e => player.keys[e.code] = false);
 
         function resetGame() {
-            player.x = 100; player.y = 50; player.dy = 0;
-            enemy.x = canvas.width - 100; enemy.alive = true;
-            gameActive = true;
-            respawnBtn.style.display = 'none';
-            loop();
+            player.hp = 100; player.x = 100; player.y = 100; killCount = 0;
+            enemies = []; boss = null; cherry = null; gameActive = true;
+            respawnBtn.style.display = 'none'; bossWarn.style.display = 'none';
+            updateHUD(); loop();
+        }
+
+        function updateHUD() {
+            hpDisplay.innerText = player.hp;
+            killsDisplay.innerText = killCount;
         }
 
         function update() {
             if (!gameActive) return;
 
-            // Movimiento lateral
+            // Movimiento
             if (player.keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
             if (player.keys['ArrowRight'] && player.x < canvas.width - player.width) player.x += player.speed;
-            
-            // Salto
-            if (player.keys['Space'] && player.grounded) {
-                player.dy = -player.jumpForce;
-                player.grounded = false;
-            }
+            if (player.keys['Space'] && player.grounded) { player.dy = -player.jumpForce; player.grounded = false; }
 
-            // Aplicar gravedad
             player.dy += player.gravity;
             player.y += player.dy;
 
-            // --- DETECCIÓN DE SUELO (Súper sólida) ---
+            // Suelo y plataformas
+            player.grounded = false;
             if (player.y + player.height > GROUND_Y) {
-                player.y = GROUND_Y - player.height;
-                player.dy = 0;
-                player.grounded = true;
-            } else {
-                player.grounded = false;
+                player.y = GROUND_Y - player.height; player.dy = 0; player.grounded = true;
             }
+            platforms.forEach(p => {
+                if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.w &&
+                    player.y + player.height > p.y && player.y + player.height < p.y + p.h + player.dy) {
+                    player.y = p.y - player.height; player.dy = 0; player.grounded = true;
+                }
+            });
 
-            // Ataque con espada
+            // Ataque
             if (player.attacking) {
                 player.attackTimer--;
                 if (player.attackTimer <= 0) player.attacking = false;
-                
-                // Si la espada toca al enemigo
-                if (enemy.alive && player.x + player.width + 25 > enemy.x && player.x < enemy.x + enemy.width && 
-                    player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
-                    enemy.alive = false;
+            }
+
+            // Lógica de Enemigos
+            enemies.forEach((en, i) => {
+                en.x -= en.speed;
+                en.y = GROUND_Y - en.height;
+                if (en.x < -50) en.x = canvas.width + 100;
+
+                // Daño al enemigo
+                if (player.attacking && player.attackTimer === 10 && rectIntersect(player.x + 30, player.y, 30, 50, en.x, en.y, en.width, en.height)) {
+                    en.hp--;
+                    if (en.hp <= 0) {
+                        enemies.splice(i, 1); killCount++; updateHUD();
+                        if (killCount % 10 === 0 && killCount > 0) spawnBoss();
+                    }
+                }
+                // Daño al jugador
+                if (!player.attacking && rectIntersect(player.x, player.y, player.width, player.height, en.x, en.y, en.width, en.height)) {
+                    player.hp -= 0.5; updateHUD();
+                }
+            });
+
+            // Lógica del Jefe
+            if (boss) {
+                boss.x -= boss.speed;
+                boss.y = GROUND_Y - boss.height;
+                if (player.attacking && player.attackTimer === 10 && rectIntersect(player.x + 30, player.y, 40, 50, boss.x, boss.y, boss.width, boss.height)) {
+                    boss.hp--;
+                    if (boss.hp <= 0) { boss = null; bossWarn.style.display = 'none'; killCount++; updateHUD(); }
+                }
+                if (!player.attacking && rectIntersect(player.x, player.y, player.width, player.height, boss.x, boss.y, boss.width, boss.height)) {
+                    player.hp -= 1.5; updateHUD();
                 }
             }
 
-            // Enemigo
-            if (enemy.alive) {
-                enemy.y = GROUND_Y - enemy.height;
-                enemy.x -= enemy.speed;
-                if (enemy.x < -50) enemy.x = canvas.width;
-
-                // Muerte del jugador
-                if (!player.attacking && player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
-                    player.y + player.height > enemy.y && player.y < enemy.y + enemy.height) {
-                    gameActive = false;
-                    respawnBtn.style.display = 'block';
+            // Lógica Cereza
+            if (cherry) {
+                if (cherry.y + cherry.height < GROUND_Y) cherry.y += 3;
+                if (rectIntersect(player.x, player.y, player.width, player.height, cherry.x, cherry.y, cherry.width, cherry.height)) {
+                    player.hp = 100; cherry = null; updateHUD();
                 }
             }
+
+            if (player.hp <= 0) { gameActive = false; respawnBtn.style.display = 'block'; }
+        }
+
+        function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Dibujar Suelo (Marrón con pasto verde arriba)
-            ctx.fillStyle = '#4d2600'; // Tierra
-            ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
-            ctx.fillStyle = '#2ecc71'; // Pasto
-            ctx.fillRect(0, GROUND_Y, canvas.width, 10);
+            // Suelo y Plataformas
+            ctx.fillStyle = '#4d2600'; ctx.fillRect(0, GROUND_Y, canvas.width, 60);
+            ctx.fillStyle = '#2ecc71'; ctx.fillRect(0, GROUND_Y, canvas.width, 10);
+            platforms.forEach(p => { 
+                ctx.fillStyle = '#8b4513'; ctx.fillRect(p.x, p.y, p.w, p.h); 
+                ctx.fillStyle = '#2ecc71'; ctx.fillRect(p.x, p.y, p.w, 4);
+            });
 
-            // Dibujar Enemigo
-            if (enemy.alive) {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                // Ojos del enemigo
-                ctx.fillStyle = 'white';
-                ctx.fillRect(enemy.x + 5, enemy.y + 10, 8, 8);
-                ctx.fillRect(enemy.x + 25, enemy.y + 10, 8, 8);
+            // Dibujar Enemigos
+            enemies.forEach(en => {
+                ctx.fillStyle = en.hp === 2 ? '#c0392b' : '#e67e22';
+                ctx.fillRect(en.x, en.y, en.width, en.height);
+            });
+
+            // Dibujar Jefe
+            if (boss) {
+                ctx.fillStyle = '#000'; ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+                ctx.fillStyle = 'red'; ctx.fillRect(boss.x + 10, boss.y + 20, 20, 20); ctx.fillRect(boss.x + 50, boss.y + 20, 20, 20);
             }
 
-            // Dibujar Jugador (Chico de Negro)
-            ctx.fillStyle = 'black'; 
-            ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15); // Ropa
-            ctx.fillStyle = '#ffdbac'; 
-            ctx.fillRect(player.x + 5, player.y, 20, 20); // Cara
-            ctx.fillStyle = 'black';
-            ctx.fillRect(player.x + 5, player.y - 2, 20, 7); // Pelo
+            // Cereza
+            if (cherry) {
+                ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(cherry.x + 10, cherry.y + 15, 10, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'green'; ctx.fillRect(cherry.x + 8, cherry.y, 4, 10);
+            }
 
-            // Dibujar Espada
+            // Jugador
+            ctx.fillStyle = 'black'; ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15);
+            ctx.fillStyle = '#ffdbac'; ctx.fillRect(player.x + 5, player.y, 20, 20);
             if (player.attacking) {
-                ctx.fillStyle = '#bdc3c7'; // Color metal
-                ctx.fillRect(player.x + player.width, player.y + 25, 30, 8); // Hoja
-                ctx.fillStyle = '#7f8c8d'; // Mango
-                ctx.fillRect(player.x + player.width - 5, player.y + 22, 5, 14);
+                ctx.fillStyle = 'white'; ctx.fillRect(player.x + player.width, player.y + 20, 35, 8);
             }
         }
 
-        function loop() {
-            update();
-            draw();
-            if (gameActive) requestAnimationFrame(loop);
-        }
-
+        function loop() { update(); draw(); if (gameActive) requestAnimationFrame(loop); }
         loop();
     </script>
 </body>
