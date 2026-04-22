@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chico de Negro: El Guerrero</title>
+    <title>Chico de Negro: Controles Duales</title>
     <style>
         body { margin: 0; overflow: hidden; background: #5c94fc; font-family: 'Courier New', Courier, monospace; }
-        #hud { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px 4px #000; font-size: 18px; line-height: 1.5; pointer-events: none; }
+        #hud { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px 4px #000; font-size: 18px; z-index: 10; pointer-events: none; }
         #respawnBtn { 
             display: none; position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%); padding: 20px 40px; 
-            font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 10px; z-index: 20;
         }
     </style>
 </head>
@@ -16,7 +16,7 @@
     <div id="hud">
         VIDA: <span id="hp">100</span>%<br>
         ENEMIGOS: <span id="kills">0</span>/10<br>
-        <span id="bossWarn" style="color: yellow; display: none;">¡EL JEFE HA APARECIDO!</span>
+        CONTROLES: [WASD] o [FLECHAS] | ATAQUE: [X]
     </div>
     <button id="respawnBtn" onclick="resetGame()">REINTENTAR</button>
     <canvas id="gameCanvas"></canvas>
@@ -26,7 +26,6 @@
         const ctx = canvas.getContext('2d');
         const hpDisplay = document.getElementById('hp');
         const killsDisplay = document.getElementById('kills');
-        const bossWarn = document.getElementById('bossWarn');
         const respawnBtn = document.getElementById('respawnBtn');
 
         canvas.width = window.innerWidth;
@@ -51,26 +50,7 @@
             { x: 100, y: GROUND_Y - 240, w: 150, h: 15 }
         ];
 
-        function spawnEnemy() {
-            if (enemies.length < 3 && !boss) {
-                enemies.push({ x: canvas.width + Math.random() * 500, width: 40, height: 40, hp: 2, speed: 2 + Math.random() * 2 });
-            }
-        }
-
-        function spawnBoss() {
-            boss = { x: canvas.width + 100, width: 80, height: 80, hp: 4, speed: 1.5 };
-            bossWarn.style.display = 'block';
-        }
-
-        function spawnCherry() {
-            if (!cherry) {
-                cherry = { x: Math.random() * (canvas.width - 30), y: -50, width: 25, height: 25, active: true };
-            }
-        }
-
-        setInterval(spawnEnemy, 2000);
-        setInterval(spawnCherry, 8000); // Cereza cada 8 seg
-
+        // --- SISTEMA DE CONTROLES ACTUALIZADO ---
         window.addEventListener('keydown', e => {
             player.keys[e.code] = true;
             if (e.code === 'KeyX' && !player.attacking) {
@@ -83,27 +63,36 @@
         function resetGame() {
             player.hp = 100; player.x = 100; player.y = 100; killCount = 0;
             enemies = []; boss = null; cherry = null; gameActive = true;
-            respawnBtn.style.display = 'none'; bossWarn.style.display = 'none';
+            respawnBtn.style.display = 'none';
             updateHUD(); loop();
         }
 
         function updateHUD() {
-            hpDisplay.innerText = player.hp;
+            hpDisplay.innerText = Math.ceil(player.hp);
             killsDisplay.innerText = killCount;
         }
 
         function update() {
             if (!gameActive) return;
 
-            // Movimiento
-            if (player.keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
-            if (player.keys['ArrowRight'] && player.x < canvas.width - player.width) player.x += player.speed;
-            if (player.keys['Space'] && player.grounded) { player.dy = -player.jumpForce; player.grounded = false; }
+            // Movimiento Izquierda (A o Flecha Izquierda)
+            if ((player.keys['ArrowLeft'] || player.keys['KeyA']) && player.x > 0) {
+                player.x -= player.speed;
+            }
+            // Movimiento Derecha (D o Flecha Derecha)
+            if ((player.keys['ArrowRight'] || player.keys['KeyD']) && player.x < canvas.width - player.width) {
+                player.x += player.speed;
+            }
+            // Salto (W o Flecha Arriba o Espacio)
+            if ((player.keys['ArrowUp'] || player.keys['KeyW'] || player.keys['Space']) && player.grounded) {
+                player.dy = -player.jumpForce;
+                player.grounded = false;
+            }
 
             player.dy += player.gravity;
             player.y += player.dy;
 
-            // Suelo y plataformas
+            // Colisiones suelo y plataformas
             player.grounded = false;
             if (player.y + player.height > GROUND_Y) {
                 player.y = GROUND_Y - player.height; player.dy = 0; player.grounded = true;
@@ -121,40 +110,35 @@
                 if (player.attackTimer <= 0) player.attacking = false;
             }
 
-            // Lógica de Enemigos
+            // Enemigos
             enemies.forEach((en, i) => {
                 en.x -= en.speed;
                 en.y = GROUND_Y - en.height;
                 if (en.x < -50) en.x = canvas.width + 100;
 
-                // Daño al enemigo
                 if (player.attacking && player.attackTimer === 10 && rectIntersect(player.x + 30, player.y, 30, 50, en.x, en.y, en.width, en.height)) {
                     en.hp--;
-                    if (en.hp <= 0) {
-                        enemies.splice(i, 1); killCount++; updateHUD();
-                        if (killCount % 10 === 0 && killCount > 0) spawnBoss();
-                    }
+                    if (en.hp <= 0) { enemies.splice(i, 1); killCount++; updateHUD(); if (killCount % 10 === 0) spawnBoss(); }
                 }
-                // Daño al jugador
                 if (!player.attacking && rectIntersect(player.x, player.y, player.width, player.height, en.x, en.y, en.width, en.height)) {
                     player.hp -= 0.5; updateHUD();
                 }
             });
 
-            // Lógica del Jefe
+            // Jefe
             if (boss) {
                 boss.x -= boss.speed;
                 boss.y = GROUND_Y - boss.height;
                 if (player.attacking && player.attackTimer === 10 && rectIntersect(player.x + 30, player.y, 40, 50, boss.x, boss.y, boss.width, boss.height)) {
                     boss.hp--;
-                    if (boss.hp <= 0) { boss = null; bossWarn.style.display = 'none'; killCount++; updateHUD(); }
+                    if (boss.hp <= 0) { boss = null; killCount++; updateHUD(); }
                 }
                 if (!player.attacking && rectIntersect(player.x, player.y, player.width, player.height, boss.x, boss.y, boss.width, boss.height)) {
-                    player.hp -= 1.5; updateHUD();
+                    player.hp -= 1; updateHUD();
                 }
             }
 
-            // Lógica Cereza
+            // Cereza
             if (cherry) {
                 if (cherry.y + cherry.height < GROUND_Y) cherry.y += 3;
                 if (rectIntersect(player.x, player.y, player.width, player.height, cherry.x, cherry.y, cherry.width, cherry.height)) {
@@ -165,45 +149,30 @@
             if (player.hp <= 0) { gameActive = false; respawnBtn.style.display = 'block'; }
         }
 
+        function spawnEnemy() { if (enemies.length < 3 && !boss && gameActive) enemies.push({ x: canvas.width + 50, width: 40, height: 40, hp: 2, speed: 3 }); }
+        function spawnBoss() { boss = { x: canvas.width + 50, width: 80, height: 80, hp: 4, speed: 2 }; }
+        function spawnCherry() { if (!cherry && gameActive) cherry = { x: Math.random() * (canvas.width - 50), y: -50, width: 25, height: 25 }; }
+        
+        setInterval(spawnEnemy, 2500);
+        setInterval(spawnCherry, 10000);
+
         function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
             return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Suelo y Plataformas
             ctx.fillStyle = '#4d2600'; ctx.fillRect(0, GROUND_Y, canvas.width, 60);
             ctx.fillStyle = '#2ecc71'; ctx.fillRect(0, GROUND_Y, canvas.width, 10);
-            platforms.forEach(p => { 
-                ctx.fillStyle = '#8b4513'; ctx.fillRect(p.x, p.y, p.w, p.h); 
-                ctx.fillStyle = '#2ecc71'; ctx.fillRect(p.x, p.y, p.w, 4);
-            });
+            platforms.forEach(p => { ctx.fillStyle = '#8b4513'; ctx.fillRect(p.x, p.y, p.w, p.h); });
 
-            // Dibujar Enemigos
-            enemies.forEach(en => {
-                ctx.fillStyle = en.hp === 2 ? '#c0392b' : '#e67e22';
-                ctx.fillRect(en.x, en.y, en.width, en.height);
-            });
+            enemies.forEach(en => { ctx.fillStyle = en.hp === 2 ? 'red' : 'orange'; ctx.fillRect(en.x, en.y, en.width, en.height); });
+            if (boss) { ctx.fillStyle = 'black'; ctx.fillRect(boss.x, boss.y, boss.width, boss.height); }
+            if (cherry) { ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(cherry.x+12, cherry.y+12, 10, 0, Math.PI*2); ctx.fill(); }
 
-            // Dibujar Jefe
-            if (boss) {
-                ctx.fillStyle = '#000'; ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
-                ctx.fillStyle = 'red'; ctx.fillRect(boss.x + 10, boss.y + 20, 20, 20); ctx.fillRect(boss.x + 50, boss.y + 20, 20, 20);
-            }
-
-            // Cereza
-            if (cherry) {
-                ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(cherry.x + 10, cherry.y + 15, 10, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = 'green'; ctx.fillRect(cherry.x + 8, cherry.y, 4, 10);
-            }
-
-            // Jugador
             ctx.fillStyle = 'black'; ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15);
             ctx.fillStyle = '#ffdbac'; ctx.fillRect(player.x + 5, player.y, 20, 20);
-            if (player.attacking) {
-                ctx.fillStyle = 'white'; ctx.fillRect(player.x + player.width, player.y + 20, 35, 8);
-            }
+            if (player.attacking) { ctx.fillStyle = 'white'; ctx.fillRect(player.x + player.width, player.y + 20, 35, 8); }
         }
 
         function loop() { update(); draw(); if (gameActive) requestAnimationFrame(loop); }
